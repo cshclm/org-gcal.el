@@ -63,6 +63,16 @@
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-file-header nil
+  "Header string to add to the file"
+  :group 'org-gcal
+  :type 'string)
+
+(defcustom org-gcal-file-footer nil
+  "Footer string to add to the file"
+  :group 'org-gcal
+  :type 'string)
+
 (defcustom org-gcal-dir
   (concat user-emacs-directory "org-gcal/")
   "File in which to save token."
@@ -228,10 +238,13 @@
                          (erase-buffer)
                          (let ((items (org-gcal--filter (plist-get (request-response-data response) :items ))))
                            (insert
-                            (mapconcat 'identity
-                                       (mapcar (lambda (lst)
-                                                 (org-gcal--cons-list lst))
-                                               items) ""))
+                            (concat
+                             (if org-gcal-file-header (concat org-gcal-file-header "\n"))
+                             (mapconcat 'identity
+                                        (mapcar (lambda (lst)
+                                                  (org-gcal--cons-list lst))
+                                                items) "")
+                             (if org-gcal-file-footer (concat org-gcal-file-footer "\n"))))
                            (let ((plst (with-temp-buffer (insert-file-contents org-gcal-token-file)
                                                          (read (buffer-string)))))
                              (with-temp-file org-gcal-token-file (pp (plist-put plst (intern (concat ":" (car x))) (mapcar (lambda (lst)
