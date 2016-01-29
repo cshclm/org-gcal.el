@@ -75,6 +75,11 @@
   :group 'org-gcal
   :type 'string)
 
+(defcustom org-gcal-todo-keyword "TODO"
+  "Todo-keyword to use for entries added."
+  :group 'org-gcal
+  :type 'string)
+
 (defcustom org-gcal-client-id nil
   "Client ID for OAuth."
   :group 'org-gcal
@@ -562,7 +567,9 @@ TO.  Instead an empty string is returned."
          (start (if stime stime sday))
          (end   (if etime etime eday)))
     (concat
-     "* " smry "\n"
+     "* " (if org-gcal-todo-keyword
+              (concat org-gcal-todo-keyword " ")
+            "") smry "\n"
      "  :PROPERTIES:\n"
      (when loc "  :LOCATION: ") loc (when loc "\n")
      "  :LINK: ""[[" link "][Go to gcal web page]]\n"
