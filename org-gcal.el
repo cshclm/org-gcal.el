@@ -85,6 +85,12 @@
   :group 'org-gcal
   :type 'string)
 
+(defcustom org-gcal-entry-record-file
+  (expand-file-name ".org-gcal-entry-records" org-gcal-dir)
+  "File in which to save fetched entity IDs."
+  :group 'org-gcal
+  :type 'string)
+
 (defcustom org-gcal-todo-keyword "TODO"
   "Todo-keyword to use for entries added."
   :group 'org-gcal
@@ -94,6 +100,11 @@
   "Client ID for OAuth."
   :group 'org-gcal
   :type 'string)
+
+(defcustom org-gcal-skip-fetched-entries-flag t
+  "Flag to indicate whether to skip entries which have already been fetched."
+  :group 'org-gcal
+  :type 'boolean)
 
 (defcustom org-gcal-client-secret nil
   "Google calendar secret key for OAuth."
@@ -121,6 +132,9 @@
 
 (defvar org-gcal-token-plist nil
   "token plist.")
+
+(defvar org-gcal-known-entry-id-list '()
+  "List of known entry IDs.")
 
 (defvar org-gcal-icon-list '("org.png" "emacs.png")
   "icon file name list.")
@@ -563,6 +577,17 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--iso-previous-day (str)
   (org-gcal--iso-next-day str t))
 
+(defun org-gcal--entry-is-known-p (id)
+  (member id org-gcal-known-entry-id-list))
+
+(defun org-gcal--skip-id-p (id)
+  (and org-gcal-skip-fetched-entries-flag (org-gcal--entry-is-known-p id)))
+
+(defun org-gcal--record-id (id)
+  (unless (org-gcal--entry-is-known-p id)
+    (add-to-list 'org-gcal-known-entry-id-list id)
+    (write-region (concat id "\n") nil org-gcal-entry-record-file 'append)))
+
 (defun org-gcal--cons-list (plst)
   (let* ((smry  (plist-get plst :summary))
          (pdesc (or (plist-get plst :description) ""))
@@ -580,41 +605,43 @@ TO.  Instead an empty string is returned."
                            :date))
          (start (if stime stime sday))
          (end   (if etime etime eday)))
-    (concat
-     "* " (if org-gcal-todo-keyword
-              (concat org-gcal-todo-keyword " ")
-            "") smry "\n"
-     "  :PROPERTIES:\n"
-     (when loc "  :LOCATION: ") loc (when loc "\n")
-     "  :LINK: ""[[" link "][Go to gcal web page]]\n"
-     "  :ID: " id "\n"
-     "  :END:\n"
-     (if (or (string= start end) (org-gcal--alldayp start end))
-         (concat "\n  "(org-gcal--format-iso2org start))
-       (if (and
-            (= (plist-get (org-gcal--parse-date start) :year)
-               (plist-get (org-gcal--parse-date end)   :year))
-            (= (plist-get (org-gcal--parse-date start) :mon)
-               (plist-get (org-gcal--parse-date end)   :mon))
-            (= (plist-get (org-gcal--parse-date start) :day)
-               (plist-get (org-gcal--parse-date end)   :day)))
-           (concat "\n " org-scheduled-string " <"
-                   (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
-                   "-"
-                   (org-gcal--format-date end "%H:%M")
-                   ">")
-         (concat "\n  " (org-gcal--format-iso2org start)
-                 "--"
-                 (org-gcal--format-iso2org
-                  (if (< 11 (length end))
-                      end
-                    (org-gcal--iso-previous-day end))))))
-     "\n"
-     (apply 'concat
-            (mapcar (lambda (s) (if (string-match-p "^$" s)
-                                    s (concat "  " s)))
-                    (split-string desc "\n")))
-     "\n")))
+    (unless (org-gcal--skip-id-p id)
+      (org-gcal--record-id id)
+      (concat
+       "* " (if org-gcal-todo-keyword
+                (concat org-gcal-todo-keyword " ")
+              "") smry "\n"
+              "  :PROPERTIES:\n"
+              (when loc "  :LOCATION: ") loc (when loc "\n")
+              "  :LINK: ""[[" link "][Go to gcal web page]]\n"
+              "  :ID: " id "\n"
+              "  :END:\n"
+              (if (or (string= start end) (org-gcal--alldayp start end))
+                  (concat "\n  "(org-gcal--format-iso2org start))
+                (if (and
+                     (= (plist-get (org-gcal--parse-date start) :year)
+                        (plist-get (org-gcal--parse-date end)   :year))
+                     (= (plist-get (org-gcal--parse-date start) :mon)
+                        (plist-get (org-gcal--parse-date end)   :mon))
+                     (= (plist-get (org-gcal--parse-date start) :day)
+                        (plist-get (org-gcal--parse-date end)   :day)))
+                    (concat "\n " org-scheduled-string " <"
+                            (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                            "-"
+                            (org-gcal--format-date end "%H:%M")
+                            ">")
+                  (concat "\n  " (org-gcal--format-iso2org start)
+                          "--"
+                          (org-gcal--format-iso2org
+                           (if (< 11 (length end))
+                               end
+                             (org-gcal--iso-previous-day end))))))
+              "\n"
+              (apply 'concat
+                     (mapcar (lambda (s) (if (string-match-p "^$" s)
+                                             s (concat "  " s)))
+                             (split-string desc "\n")))
+              "\n"))))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let* ((plst (org-gcal--parse-date str))
@@ -746,6 +773,12 @@ beginning position."
     (plist-get plst :mon)
     (plist-get plst :year))))
 
+
+(defun org-gcal--load-entries-from-file ()
+  (when (file-exists-p org-gcal-entry-record-file)
+    (with-temp-buffer
+      (insert-file-contents org-gcal-entry-record-file)
+      (setq org-gcal-known-entry-id-list (split-string (buffer-string) "\n")))))
 
 (provide 'org-gcal)
 
