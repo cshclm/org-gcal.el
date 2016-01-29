@@ -552,7 +552,8 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--cons-list (plst)
   (let* ((smry  (plist-get plst :summary))
-         (desc  (plist-get plst :description))
+         (pdesc (or (plist-get plst :description) ""))
+         (desc  (concat pdesc (if (string-match-p "\n$" pdesc) "" "\n")))
          (loc   (plist-get plst :location))
          (link  (plist-get plst :htmlLink))
          (id    (plist-get plst :id))
@@ -594,10 +595,13 @@ TO.  Instead an empty string is returned."
                  (org-gcal--format-iso2org
                   (if (< 11 (length end))
                       end
-                    (org-gcal--iso-previous-day end)))))) "\n"
-		    (when desc "\n")
-		    desc
-		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
+                    (org-gcal--iso-previous-day end))))))
+     "\n"
+     (apply 'concat
+            (mapcar (lambda (s) (if (string-match-p "^$" s)
+                                    s (concat "  " s)))
+                    (split-string desc "\n")))
+     "\n")))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let* ((plst (org-gcal--parse-date str))
