@@ -154,6 +154,7 @@
 
 (defun org-gcal-sync (&optional a-token skip-export silent)
   (interactive)
+  (org-gcal--load-entries-from-file)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
     (dolist (i org-gcal-file-alist)
@@ -621,7 +622,7 @@ TO.  Instead an empty string is returned."
                  (plist-get (org-gcal--parse-date end)   :mon))
               (= (plist-get (org-gcal--parse-date start) :day)
                  (plist-get (org-gcal--parse-date end)   :day)))
-             (concat "\n " org-scheduled-string " <"
+             (concat org-scheduled-string " <"
                      (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
                      "-"
                      (org-gcal--format-date end "%H:%M")
@@ -632,7 +633,7 @@ TO.  Instead an empty string is returned."
                     (if (< 11 (length end))
                         end
                       (org-gcal--iso-previous-day end))))))
-       "  :PROPERTIES:\n"
+       "\n  :PROPERTIES:\n"
        (when loc "  :LOCATION: ") loc (when loc "\n")
        "  :LINK: ""[[" link "][Go to gcal web page]]\n"
        "  :ID: " id "\n"
@@ -776,7 +777,8 @@ beginning position."
 
 
 (defun org-gcal--load-entries-from-file ()
-  (when (file-exists-p org-gcal-entry-record-file)
+  (when (and (file-exists-p org-gcal-entry-record-file)
+             (eq org-gcal-known-entry-id-list '()))
     (with-temp-buffer
       (insert-file-contents org-gcal-entry-record-file)
       (setq org-gcal-known-entry-id-list (split-string (buffer-string) "\n")))))
